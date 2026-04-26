@@ -8,5 +8,5 @@
   "iot_class": "cloud_push",
   "loggers": ["sleekxmppfs", "sucks", "deebot_client"],
   "requirements": ["py-sucks==0.9.11", "deebot-client==18.1.0"],
-  "version": "1.0.3"
+  "version": "1.0.4"
 }
