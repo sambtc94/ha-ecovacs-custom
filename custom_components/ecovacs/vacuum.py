@@ -398,21 +398,35 @@ class EcovacsVacuum(
         return await self._device.execute_command(position_commands[0])
 
     # BEGIN CUSTOM CODE
-    async def async_raw_get_rooms(
+    async def async_raw_get_map_info(
         self,
     ) -> dict[str, Any]:
-        """Get raw room metadata."""
-        _LOGGER.debug("async_raw_get_rooms")
+        """Get raw cached map metadata."""
+        _LOGGER.debug("async_raw_get_map_info")
 
         if not (map_cap := self._capability.map) or not (
             room_commands := map_cap.rooms.get
         ):
             raise ServiceValidationError(
                 translation_domain=DOMAIN,
-                translation_key="vacuum_raw_get_rooms_not_supported",
+                translation_key="vacuum_raw_get_map_info_not_supported",
             )
 
         return await self._device.execute_command(room_commands[0])
+
+    async def async_raw_get_map_set(
+        self,
+    ) -> dict[str, Any]:
+        """Get raw map set metadata."""
+        _LOGGER.debug("async_raw_get_map_set")
+
+        if not (map_cap := self._capability.map) or map_cap.set is None:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="vacuum_raw_get_map_set_not_supported",
+            )
+
+        return await self._device.execute_command(map_cap.set.execute())
     # END CUSTOM CODE
 
     @callback

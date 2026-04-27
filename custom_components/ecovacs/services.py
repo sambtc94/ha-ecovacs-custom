@@ -10,7 +10,8 @@ from .const import DOMAIN
 
 SERVICE_RAW_GET_POSITIONS = "raw_get_positions"
 # BEGIN CUSTOM CODE
-SERVICE_RAW_GET_ROOMS = "raw_get_rooms"
+SERVICE_RAW_GET_MAP_INFO = "raw_get_map_info"
+SERVICE_RAW_GET_MAP_SET = "raw_get_map_set"
 # END CUSTOM CODE
 
 
@@ -33,10 +34,19 @@ def async_setup_services(hass: HomeAssistant) -> None:
     service.async_register_platform_entity_service(
         hass,
         DOMAIN,
-        SERVICE_RAW_GET_ROOMS,
+        SERVICE_RAW_GET_MAP_INFO,
         entity_domain=VACUUM_DOMAIN,
         schema=None,
-        func="async_raw_get_rooms",
+        func="async_raw_get_map_info",
+        supports_response=SupportsResponse.ONLY,
+    )
+    service.async_register_platform_entity_service(
+        hass,
+        DOMAIN,
+        SERVICE_RAW_GET_MAP_SET,
+        entity_domain=VACUUM_DOMAIN,
+        schema=None,
+        func="async_raw_get_map_set",
         supports_response=SupportsResponse.ONLY,
     )
     # END CUSTOM CODE

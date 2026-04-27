@@ -4,7 +4,13 @@ raw_get_positions:
       domain: vacuum
       integration: ecovacs
 
-raw_get_rooms:
+raw_get_map_info:
+  target:
+    entity:
+      domain: vacuum
+      integration: ecovacs
+
+raw_get_map_set:
   target:
     entity:
       domain: vacuum

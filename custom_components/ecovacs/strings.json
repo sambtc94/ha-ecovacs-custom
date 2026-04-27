@@ -300,8 +300,11 @@
     "vacuum_raw_get_positions_not_supported": {
       "message": "Retrieving the positions of the chargers and the device itself is not supported"
     },
-    "vacuum_raw_get_rooms_not_supported": {
-      "message": "Retrieving room metadata is not supported"
+    "vacuum_raw_get_map_info_not_supported": {
+      "message": "Retrieving cached map metadata is not supported"
+    },
+    "vacuum_raw_get_map_set_not_supported": {
+      "message": "Retrieving map set metadata is not supported"
     },
     "vacuum_send_command_params_dict": {
       "message": "Params must be a dictionary and not a list"
@@ -323,9 +326,13 @@
       "description": "Retrieves a raw response containing the positions of the chargers and the device itself.",
       "name": "Get raw positions"
     },
-    "raw_get_rooms": {
-      "description": "Retrieves a raw response containing map room metadata.",
-      "name": "Get raw rooms"
+    "raw_get_map_info": {
+      "description": "Retrieves a raw response containing cached map metadata.",
+      "name": "Get raw map info"
+    },
+    "raw_get_map_set": {
+      "description": "Retrieves a raw response containing map set metadata.",
+      "name": "Get raw map set"
     }
   }
 }
