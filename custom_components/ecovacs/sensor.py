@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
+import base64
+import binascii
+import json
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -17,6 +22,7 @@ from deebot_client.capabilities import (
 from deebot_client.device import Device
 from deebot_client.events import (
     BatteryEvent,
+    CachedMapInfoEvent,
     ErrorEvent,
     Event,
     LifeSpan,
@@ -446,6 +452,9 @@ class EcovacsLegacyLifespanSensor(EcovacsLegacyEntity, SensorEntity):
         self._event_listeners.append(self.device.lifespanEvents.subscribe(on_event))
 
 
+_SENSOR_LOGGER = logging.getLogger(__name__)
+
+
 # BEGIN CUSTOM CODE
 def _parse_coordinates(coords_str: str) -> list[tuple[int, int]]:
     """Parse semicolon-delimited 'x,y' coordinate string into a list of tuples."""
@@ -491,6 +500,127 @@ def _resolve_room_for_coordinates(
 
 
 _ROOMS_REFRESH_REQUESTED_DIDS: set[str] = set()
+_ROOM_CENTERS_FETCHED_DIDS: set[str] = set()
+
+
+def _extract_room_centers_from_subsets(subsets_b64: str) -> list[dict[str, Any]]:
+    """Decode zstd-compressed subsets payload and return list of room center dicts."""
+    try:
+        payload = base64.b64decode(subsets_b64, validate=True)
+    except (binascii.Error, ValueError):
+        return []
+
+    decompressed: bytes | None = None
+
+    if payload.startswith(b"\x28\xB5\x2F\xFD"):
+        try:
+            import zstandard  # type: ignore[import-not-found]
+
+            decompressed = zstandard.ZstdDecompressor().decompress(payload)
+        except Exception:  # noqa: BLE001
+            return []
+    else:
+        import gzip
+        import lzma
+        import zlib
+
+        for decoder in [
+            lambda d: zlib.decompress(d),
+            lambda d: gzip.decompress(d),
+            lambda d: lzma.decompress(d),
+            lambda d: zlib.decompress(d, -zlib.MAX_WBITS),
+        ]:
+            try:
+                decompressed = decoder(payload)
+                break
+            except Exception:  # noqa: BLE001
+                pass
+
+    if decompressed is None:
+        return []
+
+    try:
+        parsed = json.loads(decompressed.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return []
+
+    if not isinstance(parsed, list):
+        return []
+
+    centers: list[dict[str, Any]] = []
+    for entry in parsed:
+        if not isinstance(entry, list) or len(entry) < 7:
+            continue
+        try:
+            centers.append({
+                "id": int(entry[0]),
+                "name": str(entry[1]).strip() or f"Room {entry[0]}",
+                "x": int(entry[5]),
+                "y": int(entry[6]),
+            })
+        except (ValueError, TypeError, IndexError):
+            pass
+
+    return centers
+
+
+def _resolve_room_by_nearest_center(
+    centers: list[dict[str, Any]],
+    x: int,
+    y: int,
+) -> tuple[str | None, int | None]:
+    """Return (name, id) of the room whose center is nearest to (x, y)."""
+    if not centers:
+        return None, None
+    best = min(centers, key=lambda c: (c["x"] - x) ** 2 + (c["y"] - y) ** 2)
+    return best["name"], best["id"]
+
+
+async def _fetch_room_centers_once(
+    device: Device,
+    capability: CapabilityMap,
+) -> list[dict[str, Any]]:
+    """Fetch and decode room centers from GetMapSetV2 (once per device)."""
+    did = device.device_info["did"]
+    if did in _ROOM_CENTERS_FETCHED_DIDS:
+        return []
+    _ROOM_CENTERS_FETCHED_DIDS.add(did)
+
+    if capability.set is None:
+        return []
+
+    # Resolve active map id
+    map_id: str | None = None
+    if cached := device.events.get_last_event(CachedMapInfoEvent):
+        map_id = next(
+            (m.id for m in cached.maps if m.using), None
+        )
+
+    if map_id is None and capability.rooms.get:
+        try:
+            async with asyncio.timeout(20):
+                raw = await device.execute_command(capability.rooms.get[0])
+        except Exception:  # noqa: BLE001
+            return []
+        for m in raw.get("resp", {}).get("body", {}).get("data", {}).get("info", []):
+            if m.get("using") == 1 and m.get("mid") not in (None, "0", ""):
+                map_id = m["mid"]
+                break
+
+    if map_id is None:
+        return []
+
+    try:
+        async with asyncio.timeout(20):
+            resp = await device.execute_command(capability.set.execute(map_id))
+    except Exception:  # noqa: BLE001
+        return []
+
+    subsets = resp.get("resp", {}).get("body", {}).get("data", {}).get("subsets")
+    if not isinstance(subsets, str) or not subsets:
+        return []
+
+    return _extract_room_centers_from_subsets(subsets)
 
 
 def _request_rooms_refresh_once(device: Device, capability: CapabilityMap) -> None:
@@ -523,6 +653,7 @@ class EcovacsCurrentRoomSensor(
         )
         self._attr_name = "Current room"
         self._rooms: list = []
+        self._room_centers: list[dict[str, Any]] = []
         self._map_id: str | None = None
         self._attr_native_value: str | None = None
         self._attr_extra_state_attributes = {
@@ -543,6 +674,10 @@ class EcovacsCurrentRoomSensor(
         self._attr_extra_state_attributes["map_id"] = self._map_id
 
         room_name, room_id = _resolve_room_for_coordinates(self._rooms, x, y)
+        if room_name is None and self._room_centers:
+            room_name, room_id = _resolve_room_by_nearest_center(
+                self._room_centers, x, y
+            )
         self._attr_native_value = room_name
         self._attr_extra_state_attributes["room_id"] = room_id
         self.async_write_ha_state()
@@ -565,6 +700,18 @@ class EcovacsCurrentRoomSensor(
         async def on_positions(event: PositionsEvent) -> None:
             if not self._rooms:
                 _request_rooms_refresh_once(self._device, self._capability)
+                if not self._room_centers:
+                    centers = await _fetch_room_centers_once(
+                        self._device, self._capability
+                    )
+                    if centers:
+                        self._room_centers = centers
+                        self._attr_extra_state_attributes["available_room_ids"] = [
+                            c["id"] for c in centers
+                        ]
+                        self._attr_extra_state_attributes["available_rooms"] = {
+                            c["name"]: c["id"] for c in centers
+                        }
 
             for pos in event.positions:
                 position_type = getattr(pos.type, "name", str(pos.type)).upper()
@@ -604,6 +751,7 @@ class EcovacsStationCurrentRoomSensor(
         )
         self._attr_name = "Station current room"
         self._rooms: list = []
+        self._room_centers: list[dict[str, Any]] = []
         self._map_id: str | None = None
         self._attr_native_value: str | None = None
         self._attr_extra_state_attributes = {
@@ -624,6 +772,10 @@ class EcovacsStationCurrentRoomSensor(
         self._attr_extra_state_attributes["map_id"] = self._map_id
 
         room_name, room_id = _resolve_room_for_coordinates(self._rooms, x, y)
+        if room_name is None and self._room_centers:
+            room_name, room_id = _resolve_room_by_nearest_center(
+                self._room_centers, x, y
+            )
         self._attr_native_value = room_name
         self._attr_extra_state_attributes["room_id"] = room_id
         self.async_write_ha_state()
@@ -646,6 +798,18 @@ class EcovacsStationCurrentRoomSensor(
         async def on_positions(event: PositionsEvent) -> None:
             if not self._rooms:
                 _request_rooms_refresh_once(self._device, self._capability)
+                if not self._room_centers:
+                    centers = await _fetch_room_centers_once(
+                        self._device, self._capability
+                    )
+                    if centers:
+                        self._room_centers = centers
+                        self._attr_extra_state_attributes["available_room_ids"] = [
+                            c["id"] for c in centers
+                        ]
+                        self._attr_extra_state_attributes["available_rooms"] = {
+                            c["name"]: c["id"] for c in centers
+                        }
 
             for pos in event.positions:
                 position_type = getattr(pos.type, "name", str(pos.type)).upper()
