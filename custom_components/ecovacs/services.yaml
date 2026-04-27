@@ -21,3 +21,9 @@ raw_get_map_set_decoded:
     entity:
       domain: vacuum
       integration: ecovacs
+
+raw_get_quick_commands:
+  target:
+    entity:
+      domain: vacuum
+      integration: ecovacs

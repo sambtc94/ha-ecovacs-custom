@@ -124,5 +124,16 @@
         "name": "Reset water sink lifespan"
       }
     }
+  },
+  "exceptions": {
+    "quick_commands_not_supported": {
+      "message": "Quick commands are not supported by this device"
+    }
+  },
+  "services": {
+    "raw_get_quick_commands": {
+      "description": "Retrieves available quick commands from the vacuum.",
+      "name": "Get quick commands"
+    }
   }
 }

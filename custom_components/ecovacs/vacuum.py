@@ -341,6 +341,8 @@ class EcovacsVacuum(
         """Initialize the vacuum."""
         super().__init__(device, device.capabilities)
 
+        self._quick_commands_lock = asyncio.Lock()
+        self._quick_commands: list[dict[str, Any]] = []
         self._room_event: RoomsEvent | None = None
         self._fallback_rooms: list[dict[str, Any]] = []
         self._fallback_map_id: str | None = None
@@ -641,6 +643,104 @@ class EcovacsVacuum(
             response["decoded_subsets"] = {"error": "no_subsets_payload"}
 
         return response
+
+    async def async_raw_get_quick_commands(
+        self,
+    ) -> dict[str, Any]:
+        """Get available quick commands from the device."""
+        async with self._quick_commands_lock:
+            _LOGGER.debug("Fetching quick commands for %s", self.entity_id)
+
+            if self._capability.custom is None:
+                raise ServiceValidationError(
+                    translation_domain=DOMAIN,
+                    translation_key="quick_commands_not_supported",
+                )
+
+            try:
+                dev_info = await self._device.execute_command(
+                    self._capability.custom.set(
+                        "getInfo",
+                        {"data": "getRobotState"},
+                    )
+                )
+
+                map_id = (
+                    dev_info
+                    .get("resp", {})
+                    .get("body", {})
+                    .get("data", {})
+                    .get("getRobotState", {})
+                    .get("data", {})
+                    .get("mid")
+                )
+
+                if not map_id:
+                    raise KeyError("mid missing from getRobotState response")
+
+                result = await self._device.execute_command(
+                    self._capability.custom.set(
+                        "getQuickCommand",
+                        {"mid": map_id},
+                    )
+                )
+
+                if not isinstance(result, dict):
+                    raise TypeError("Invalid quick command response")
+
+                data = result.get("resp", {}).get("body", {}).get("data")
+                commands: list[Any] = []
+                if isinstance(data, list) and data:
+                    first = data[0]
+                    if isinstance(first, dict):
+                        commands = first.get("array", [])
+
+                if not isinstance(commands, list):
+                    commands = []
+
+                quick_commands: list[dict[str, Any]] = []
+                for command in commands:
+                    if not isinstance(command, dict):
+                        continue
+
+                    name = command.get("name")
+                    qcid = command.get("qcid")
+                    command_mid = command.get("mid")
+
+                    if not name or not qcid or not command_mid:
+                        continue
+
+                    quick_commands.append(
+                        {
+                            "name": name,
+                            "qcid": qcid,
+                            "mid": command_mid,
+                        }
+                    )
+
+                self._quick_commands = quick_commands
+
+                _LOGGER.debug(
+                    "Quick commands for %s: %s",
+                    self.entity_id,
+                    quick_commands,
+                )
+
+                return {
+                    "mid": map_id,
+                    "quick_commands": quick_commands,
+                    "raw": result,
+                }
+            except Exception as err:
+                _LOGGER.debug(
+                    "Quick commands not supported for %s: %s",
+                    self.entity_id,
+                    err,
+                )
+                raise ServiceValidationError(
+                    translation_domain=DOMAIN,
+                    translation_key="quick_commands_not_supported",
+                ) from err
 
     async def _async_ensure_fallback_rooms(self) -> bool:
         """Populate fallback room list from decoded map set when RoomsEvent is missing."""
