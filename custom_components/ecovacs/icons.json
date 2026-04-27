@@ -159,7 +159,7 @@
         "default": "mdi:timer-outline"
       },
       "station_current_room": {
-        "default": "mdi:floor-plan-variant"
+        "default": "mdi:map-marker"
       },
       "current_room": {
         "default": "mdi:map-marker"
