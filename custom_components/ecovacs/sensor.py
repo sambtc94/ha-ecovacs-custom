@@ -499,6 +499,19 @@ def _resolve_room_for_coordinates(
     return None, None
 
 
+_ROOMS_REFRESH_REQUESTED_DIDS: set[str] = set()
+
+
+def _request_rooms_refresh_once(device: Device, capability: CapabilityMap) -> None:
+    """Request a one-time rooms refresh for devices that don't push rooms eagerly."""
+    did = device.device_info["did"]
+    if did in _ROOMS_REFRESH_REQUESTED_DIDS:
+        return
+
+    _ROOMS_REFRESH_REQUESTED_DIDS.add(did)
+    device.events.request_refresh(capability.rooms.event)
+
+
 def _safe_repr(value: Any, max_len: int = 600) -> str:
     """Return a truncated repr to keep logs readable."""
     try:
@@ -600,6 +613,9 @@ class EcovacsCurrentRoomSensor(
             self._attr_extra_state_attributes["map_id"] = event.map_id
 
         async def on_positions(event: PositionsEvent) -> None:
+            if not self._rooms:
+                _request_rooms_refresh_once(self._device, self._capability)
+
             for pos in event.positions:
                 position_type = getattr(pos.type, "name", str(pos.type)).upper()
                 if "DEEBOT" not in position_type:
@@ -672,6 +688,9 @@ class EcovacsStationCurrentRoomSensor(
             self._attr_extra_state_attributes["map_id"] = event.map_id
 
         async def on_positions(event: PositionsEvent) -> None:
+            if not self._rooms:
+                _request_rooms_refresh_once(self._device, self._capability)
+
             for pos in event.positions:
                 position_type = getattr(pos.type, "name", str(pos.type)).upper()
                 if any(token in position_type for token in ("CHARG", "STATION", "DOCK")):
