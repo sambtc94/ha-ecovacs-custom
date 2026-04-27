@@ -488,6 +488,18 @@ class EcovacsCurrentRoomSensor(
         self._rooms: list = []
         self._attr_native_value: str | None = None
 
+    def _set_room_from_position(self, x: int, y: int) -> None:
+        """Update state from the provided map position."""
+        for room in self._rooms:
+            vertices = _parse_coordinates(room.coordinates)
+            if vertices and _point_in_polygon(x, y, vertices):
+                self._attr_native_value = room.name
+                self.async_write_ha_state()
+                return
+
+        self._attr_native_value = None
+        self.async_write_ha_state()
+
     async def async_added_to_hass(self) -> None:
         """Set up the event listeners now that hass is ready."""
         await super().async_added_to_hass()
@@ -497,18 +509,15 @@ class EcovacsCurrentRoomSensor(
 
         async def on_positions(event: PositionsEvent) -> None:
             for pos in event.positions:
-                if getattr(pos.type, "name", None) != "DEEBOT":
+                position_type = getattr(pos.type, "name", str(pos.type)).upper()
+                if "DEEBOT" not in position_type:
                     continue
-                for room in self._rooms:
-                    vertices = _parse_coordinates(room.coordinates)
-                    if vertices and _point_in_polygon(pos.x, pos.y, vertices):
-                        self._attr_native_value = room.name
-                        self.async_write_ha_state()
-                        return
-                self._attr_native_value = None
-                self.async_write_ha_state()
+
+                self._set_room_from_position(pos.x, pos.y)
                 return
 
         self._subscribe(self._capability.rooms.event, on_rooms)
         self._subscribe(self._capability.position.event, on_positions)
+        self._device.events.request_refresh(self._capability.rooms.event)
+        self._device.events.request_refresh(self._capability.position.event)
 # END CUSTOM CODE
