@@ -261,9 +261,17 @@ class EcovacsVacuum(
             async def on_rooms(event: RoomsEvent) -> None:
                 self._room_event = event
                 # BEGIN CUSTOM CODE
+                device_name = self._device.device_info.get(
+                    "nick", self._device.device_info["name"]
+                )
                 for room in event.rooms:
                     _LOGGER.warning(
-                        "ROOM DEBUG: map_id=%s id=%s name=%s coordinates=%s",
+                        (
+                            "ROOM DEBUG: entity_id=%s device=%s map_id=%s "
+                            "id=%s name=%s coordinates=%s"
+                        ),
+                        self.entity_id,
+                        device_name,
                         event.map_id,
                         room.id,
                         room.name,
@@ -283,9 +291,17 @@ class EcovacsVacuum(
 
             # BEGIN CUSTOM CODE
             async def on_positions(event: PositionsEvent) -> None:
+                device_name = self._device.device_info.get(
+                    "nick", self._device.device_info["name"]
+                )
                 for pos in event.positions:
                     _LOGGER.warning(
-                        "POS DEBUG: type=%s x=%s y=%s a=%s",
+                        (
+                            "POS DEBUG: entity_id=%s device=%s type=%s "
+                            "x=%s y=%s a=%s"
+                        ),
+                        self.entity_id,
+                        device_name,
                         pos.type,
                         pos.x,
                         pos.y,
