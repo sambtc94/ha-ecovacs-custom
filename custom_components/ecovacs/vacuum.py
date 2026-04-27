@@ -819,6 +819,26 @@ class EcovacsVacuum(
             # Supported feature is only added if clean.action.area is not None
             assert self._capability.clean.action.area is not None
 
+        if fallback_mode:
+            rooms_str = ";".join(f"1,{room_id}" for room_id in valid_room_ids)
+            _LOGGER.debug(
+                "Using clean_V2 command for fallback rooms (X11): %s",
+                rooms_str,
+            )
+            await self._device.execute_command(
+                self._capability.custom.set(
+                    "clean_V2",
+                    {
+                        "act": "start",
+                        "content": {
+                            "type": "freeClean",
+                            "value": rooms_str,
+                        },
+                    },
+                )
+            )
+            return
+
         try:
             await self._device.execute_command(
                 self._capability.clean.action.area(
