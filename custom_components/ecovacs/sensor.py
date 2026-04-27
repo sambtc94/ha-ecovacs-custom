@@ -36,6 +36,8 @@ from deebot_client.events import (
     TotalStatsEvent,
     station,
 )
+from deebot_client.commands.json.map import GetMapSubSet
+from deebot_client.models import Room
 from sucks import VacBot
 
 from homeassistant.components.sensor import (
@@ -579,15 +581,20 @@ def _resolve_room_by_nearest_center(
 async def _fetch_room_centers_once(
     device: Device,
     capability: CapabilityMap,
-) -> list[dict[str, Any]]:
-    """Fetch and decode room centers from GetMapSetV2 (once per device)."""
+) -> tuple[list[dict[str, Any]], list[Room]]:
+    """Fetch room data from GetMapSetV2.  Returns (centers, polygon_rooms).
+
+    If the device responds to getMapSubSet, polygon_rooms will be populated
+    and should be preferred for accurate room detection.  Otherwise centers
+    (nearest-centre fallback) are returned.
+    """
     did = device.device_info["did"]
     if did in _ROOM_CENTERS_FETCHED_DIDS:
-        return []
+        return [], []
 
     if capability.set is None:
         _ROOM_CENTERS_FETCHED_DIDS.add(did)
-        return []
+        return [], []
 
     # Resolve active map id
     map_id: str | None = None
@@ -601,29 +608,65 @@ async def _fetch_room_centers_once(
             async with asyncio.timeout(20):
                 raw = await device.execute_command(capability.rooms.get[0])
         except Exception:  # noqa: BLE001
-            return []
+            return [], []
         for m in raw.get("resp", {}).get("body", {}).get("data", {}).get("info", []):
             if m.get("using") == 1 and m.get("mid") not in (None, "0", ""):
                 map_id = m["mid"]
                 break
 
     if map_id is None:
-        return []
+        return [], []
 
     try:
         async with asyncio.timeout(20):
             resp = await device.execute_command(capability.set.execute(map_id))
     except Exception:  # noqa: BLE001
-        return []
+        return [], []
 
     # Mark as fetched after successfully calling map set to avoid repeated API calls.
     _ROOM_CENTERS_FETCHED_DIDS.add(did)
 
-    subsets = resp.get("resp", {}).get("body", {}).get("data", {}).get("subsets")
+    resp_data = resp.get("resp", {}).get("body", {}).get("data", {})
+    subsets = resp_data.get("subsets")
     if not isinstance(subsets, str) or not subsets:
-        return []
+        return [], []
 
-    return _extract_room_centers_from_subsets(subsets)
+    centers = _extract_room_centers_from_subsets(subsets)
+    if not centers:
+        return [], []
+
+    # Try to fetch polygon boundaries via getMapSubSet — more accurate than centres.
+    msid = resp_data.get("msid")
+    if msid:
+        polygon_rooms: list[Room] = []
+        try:
+            from deebot_client.rs.util import decompress_7z_base64_data  # noqa: PLC0415
+
+            for center in centers:
+                async with asyncio.timeout(10):
+                    sub_resp = await device.execute_command(
+                        GetMapSubSet(
+                            mid=map_id,
+                            msid=msid,
+                            mssid=center["id"],
+                        )
+                    )
+                sub_data = sub_resp.get("resp", {}).get("body", {}).get("data", {})
+                coords_raw = sub_data.get("value")
+                if not coords_raw:
+                    break
+                if sub_data.get("compress", 0) == 1:
+                    coords_raw = decompress_7z_base64_data(coords_raw).decode()
+                polygon_rooms.append(
+                    Room(name=center["name"], id=center["id"], coordinates=coords_raw)
+                )
+        except Exception:  # noqa: BLE001
+            polygon_rooms = []
+
+        if len(polygon_rooms) == len(centers):
+            return centers, polygon_rooms
+
+    return centers, []
 
 
 def _request_rooms_refresh_once(device: Device, capability: CapabilityMap) -> None:
@@ -693,8 +736,16 @@ class EcovacsCurrentRoomSensor(
             if self._rooms or self._room_centers:
                 return
 
-            centers = await _fetch_room_centers_once(self._device, self._capability)
-            if centers:
+            centers, polygon_rooms = await _fetch_room_centers_once(self._device, self._capability)
+            if polygon_rooms:
+                self._rooms = polygon_rooms
+                self._attr_extra_state_attributes["available_room_ids"] = [
+                    r.id for r in polygon_rooms
+                ]
+                self._attr_extra_state_attributes["available_rooms"] = {
+                    r.name: r.id for r in polygon_rooms
+                }
+            elif centers:
                 self._room_centers = centers
                 self._attr_extra_state_attributes["available_room_ids"] = [
                     c["id"] for c in centers
@@ -801,8 +852,16 @@ class EcovacsStationCurrentRoomSensor(
             if self._rooms or self._room_centers:
                 return
 
-            centers = await _fetch_room_centers_once(self._device, self._capability)
-            if centers:
+            centers, polygon_rooms = await _fetch_room_centers_once(self._device, self._capability)
+            if polygon_rooms:
+                self._rooms = polygon_rooms
+                self._attr_extra_state_attributes["available_room_ids"] = [
+                    r.id for r in polygon_rooms
+                ]
+                self._attr_extra_state_attributes["available_rooms"] = {
+                    r.name: r.id for r in polygon_rooms
+                }
+            elif centers:
                 self._room_centers = centers
                 self._attr_extra_state_attributes["available_room_ids"] = [
                     c["id"] for c in centers

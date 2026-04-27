@@ -12,26 +12,31 @@ CONF_OVERRIDE_REST_URL = "override_rest_url"
 CONF_OVERRIDE_MQTT_URL = "override_mqtt_url"
 CONF_VERIFY_MQTT_CERTIFICATE = "verify_mqtt_certificate"
 
-SUPPORTED_LIFESPANS = (
-    LifeSpan.AIR_FRESHENER,
-    LifeSpan.BLADE,
-    LifeSpan.BRUSH,
-    LifeSpan.DUST_BAG,
-    LifeSpan.FILTER,
-    LifeSpan.HAND_FILTER,
-    LifeSpan.LENS_BRUSH,
-    LifeSpan.ROUND_MOP,
-    LifeSpan.SIDE_BRUSH,
-    LifeSpan.STATION_FILTER,
-    LifeSpan.UNIT_CARE,
-    LifeSpan.UV_SANITIZER,
-    LifeSpan.CLEANING_SOLUTION,
-    LifeSpan.DUST_BUCKET,
-    LifeSpan.DUST_CONTAINER_FILTER,
-    LifeSpan.HEAVY_DUTY_CLEANING_SOLUTION,
-    LifeSpan.MOP_WASHING_TRAY,
-    LifeSpan.SEWAGE_BOX,
-    LifeSpan.WATER_SINK,
+SUPPORTED_LIFESPANS = tuple(
+    ls
+    for name in (
+        "AIR_FRESHENER",
+        "BLADE",
+        "BRUSH",
+        "DUST_BAG",
+        "FILTER",
+        "HAND_FILTER",
+        "LENS_BRUSH",
+        "ROUND_MOP",
+        "SIDE_BRUSH",
+        "STATION_FILTER",
+        "UNIT_CARE",
+        "UV_SANITIZER",
+        # X11 types — only present if deebot_client has been patched
+        "CLEANING_SOLUTION",
+        "DUST_BUCKET",
+        "DUST_CONTAINER_FILTER",
+        "HEAVY_DUTY_CLEANING_SOLUTION",
+        "MOP_WASHING_TRAY",
+        "SEWAGE_BOX",
+        "WATER_SINK",
+    )
+    if (ls := getattr(LifeSpan, name, None)) is not None
 )
 
 SUPPORTED_STATION_ACTIONS = (
