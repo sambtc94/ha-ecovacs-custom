@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-# BEGIN CUSTOM CODE
-import logging
-# END CUSTOM CODE
-
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -64,11 +60,6 @@ from .entity import (
     EcovacsLegacyEntity,
 )
 from .util import get_name_key, get_options, get_supported_entities
-
-# BEGIN CUSTOM CODE
-_LOGGER = logging.getLogger(__name__)
-_CAPABILITY_DUMPED_DIDS: set[str] = set()
-# END CUSTOM CODE
 
 
 @dataclass(kw_only=True, frozen=True)
@@ -512,53 +503,6 @@ def _request_rooms_refresh_once(device: Device, capability: CapabilityMap) -> No
     device.events.request_refresh(capability.rooms.event)
 
 
-def _safe_repr(value: Any, max_len: int = 600) -> str:
-    """Return a truncated repr to keep logs readable."""
-    try:
-        text = repr(value)
-    except Exception as err:  # pragma: no cover - defensive logging only
-        return f"<repr failed: {err}>"
-
-    if len(text) <= max_len:
-        return text
-    return f"{text[:max_len]}... <truncated>"
-
-
-def _dump_capability_map_once(device: Device, capability: CapabilityMap) -> None:
-    """Log a one-time snapshot of the map capability object for debugging."""
-    did = device.device_info["did"]
-    if did in _CAPABILITY_DUMPED_DIDS:
-        return
-    _CAPABILITY_DUMPED_DIDS.add(did)
-
-    public_attrs = sorted(name for name in dir(capability) if not name.startswith("_"))
-    _LOGGER.warning(
-        "CAP MAP DUMP: did=%s type=%s attrs=%s",
-        did,
-        type(capability).__name__,
-        public_attrs,
-    )
-
-    for attr_name in public_attrs:
-        try:
-            attr_value = getattr(capability, attr_name)
-        except Exception as err:  # pragma: no cover - defensive logging only
-            _LOGGER.warning(
-                "CAP MAP DUMP ATTR ERROR: did=%s attr=%s error=%s",
-                did,
-                attr_name,
-                err,
-            )
-            continue
-
-        _LOGGER.warning(
-            "CAP MAP DUMP ATTR: did=%s attr=%s value=%s",
-            did,
-            attr_name,
-            _safe_repr(attr_value),
-        )
-
-
 class EcovacsCurrentRoomSensor(
     EcovacsEntity[CapabilityMap],
     SensorEntity,
@@ -588,6 +532,8 @@ class EcovacsCurrentRoomSensor(
             "angle": None,
             "room_id": None,
             "map_id": None,
+            "available_room_ids": [],
+            "available_rooms": {},
         }
 
     def _set_room_from_position(self, x: int, y: int, angle: int | None) -> None:
@@ -605,12 +551,17 @@ class EcovacsCurrentRoomSensor(
     async def async_added_to_hass(self) -> None:
         """Set up the event listeners now that hass is ready."""
         await super().async_added_to_hass()
-        _dump_capability_map_once(self._device, self._capability)
 
         async def on_rooms(event: RoomsEvent) -> None:
             self._rooms = event.rooms
             self._map_id = event.map_id
             self._attr_extra_state_attributes["map_id"] = event.map_id
+            self._attr_extra_state_attributes["available_room_ids"] = [
+                room.id for room in event.rooms
+            ]
+            self._attr_extra_state_attributes["available_rooms"] = {
+                room.name: room.id for room in event.rooms
+            }
 
         async def on_positions(event: PositionsEvent) -> None:
             if not self._rooms:
@@ -663,6 +614,8 @@ class EcovacsStationCurrentRoomSensor(
             "angle": None,
             "room_id": None,
             "map_id": None,
+            "available_room_ids": [],
+            "available_rooms": {},
         }
 
     def _set_base_station_from_position(self, x: int, y: int, angle: int | None) -> None:
@@ -680,12 +633,17 @@ class EcovacsStationCurrentRoomSensor(
     async def async_added_to_hass(self) -> None:
         """Set up the event listeners now that hass is ready."""
         await super().async_added_to_hass()
-        _dump_capability_map_once(self._device, self._capability)
 
         async def on_rooms(event: RoomsEvent) -> None:
             self._rooms = event.rooms
             self._map_id = event.map_id
             self._attr_extra_state_attributes["map_id"] = event.map_id
+            self._attr_extra_state_attributes["available_room_ids"] = [
+                room.id for room in event.rooms
+            ]
+            self._attr_extra_state_attributes["available_rooms"] = {
+                room.name: room.id for room in event.rooms
+            }
 
         async def on_positions(event: PositionsEvent) -> None:
             if not self._rooms:
