@@ -486,18 +486,33 @@ class EcovacsCurrentRoomSensor(
         """Initialize entity."""
         super().__init__(device, capability)
         self._rooms: list = []
+        self._map_id: str | None = None
         self._attr_native_value: str | None = None
+        self._attr_extra_state_attributes = {
+            "x": None,
+            "y": None,
+            "angle": None,
+            "room_id": None,
+            "map_id": None,
+        }
 
-    def _set_room_from_position(self, x: int, y: int) -> None:
+    def _set_room_from_position(self, x: int, y: int, angle: int | None) -> None:
         """Update state from the provided map position."""
+        self._attr_extra_state_attributes["x"] = x
+        self._attr_extra_state_attributes["y"] = y
+        self._attr_extra_state_attributes["angle"] = angle
+        self._attr_extra_state_attributes["map_id"] = self._map_id
+
         for room in self._rooms:
             vertices = _parse_coordinates(room.coordinates)
             if vertices and _point_in_polygon(x, y, vertices):
                 self._attr_native_value = room.name
+                self._attr_extra_state_attributes["room_id"] = room.id
                 self.async_write_ha_state()
                 return
 
         self._attr_native_value = None
+        self._attr_extra_state_attributes["room_id"] = None
         self.async_write_ha_state()
 
     async def async_added_to_hass(self) -> None:
@@ -506,6 +521,8 @@ class EcovacsCurrentRoomSensor(
 
         async def on_rooms(event: RoomsEvent) -> None:
             self._rooms = event.rooms
+            self._map_id = event.map_id
+            self._attr_extra_state_attributes["map_id"] = event.map_id
 
         async def on_positions(event: PositionsEvent) -> None:
             for pos in event.positions:
@@ -513,7 +530,7 @@ class EcovacsCurrentRoomSensor(
                 if "DEEBOT" not in position_type:
                     continue
 
-                self._set_room_from_position(pos.x, pos.y)
+                self._set_room_from_position(pos.x, pos.y, pos.a)
                 return
 
         self._subscribe(self._capability.rooms.event, on_rooms)
