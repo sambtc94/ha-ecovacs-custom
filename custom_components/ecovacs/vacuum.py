@@ -397,6 +397,24 @@ class EcovacsVacuum(
 
         return await self._device.execute_command(position_commands[0])
 
+    # BEGIN CUSTOM CODE
+    async def async_raw_get_rooms(
+        self,
+    ) -> dict[str, Any]:
+        """Get raw room metadata."""
+        _LOGGER.debug("async_raw_get_rooms")
+
+        if not (map_cap := self._capability.map) or not (
+            room_commands := map_cap.rooms.get
+        ):
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="vacuum_raw_get_rooms_not_supported",
+            )
+
+        return await self._device.execute_command(room_commands[0])
+    # END CUSTOM CODE
+
     @callback
     def _check_segments_changed(self) -> None:
         """Check if segments have changed and create repair issue."""

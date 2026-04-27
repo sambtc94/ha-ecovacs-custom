@@ -9,6 +9,9 @@ from homeassistant.helpers import service
 from .const import DOMAIN
 
 SERVICE_RAW_GET_POSITIONS = "raw_get_positions"
+# BEGIN CUSTOM CODE
+SERVICE_RAW_GET_ROOMS = "raw_get_rooms"
+# END CUSTOM CODE
 
 
 @callback
@@ -25,3 +28,15 @@ def async_setup_services(hass: HomeAssistant) -> None:
         func="async_raw_get_positions",
         supports_response=SupportsResponse.ONLY,
     )
+
+    # BEGIN CUSTOM CODE
+    service.async_register_platform_entity_service(
+        hass,
+        DOMAIN,
+        SERVICE_RAW_GET_ROOMS,
+        entity_domain=VACUUM_DOMAIN,
+        schema=None,
+        func="async_raw_get_rooms",
+        supports_response=SupportsResponse.ONLY,
+    )
+    # END CUSTOM CODE

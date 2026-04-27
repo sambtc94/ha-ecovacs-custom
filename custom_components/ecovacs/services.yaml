@@ -3,3 +3,9 @@ raw_get_positions:
     entity:
       domain: vacuum
       integration: ecovacs
+
+raw_get_rooms:
+  target:
+    entity:
+      domain: vacuum
+      integration: ecovacs
