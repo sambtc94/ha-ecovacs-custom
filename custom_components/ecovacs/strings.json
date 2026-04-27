@@ -167,6 +167,9 @@
           }
         }
       },
+      "current_room": {
+        "name": "Current room"
+      },
       "lifespan_air_freshener": {
         "name": "Air freshener lifespan"
       },
