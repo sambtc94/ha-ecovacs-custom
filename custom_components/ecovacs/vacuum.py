@@ -819,11 +819,32 @@ class EcovacsVacuum(
             # Supported feature is only added if clean.action.area is not None
             assert self._capability.clean.action.area is not None
 
+        try:
+            await self._device.execute_command(
+                self._capability.clean.action.area(
+                    CleanMode.SPOT_AREA,
+                    valid_room_ids,
+                    1,
+                )
+            )
+            return
+        except Exception as err:  # noqa: BLE001
+            # Some models (e.g. X11) report "rcp not support" for clean.area.
+            if "rcp not support" not in str(err).lower() or self._capability.custom is None:
+                raise
+
+            _LOGGER.warning(
+                "clean.area rejected (%s), retrying via custom spot_area command",
+                err,
+            )
+
         await self._device.execute_command(
-            self._capability.clean.action.area(
-                CleanMode.SPOT_AREA,
-                valid_room_ids,
-                1,
+            self._capability.custom.set(
+                "spot_area",
+                {
+                    "rooms": valid_room_ids,
+                    "cleanings": 1,
+                },
             )
         )
 
