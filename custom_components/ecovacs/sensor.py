@@ -496,10 +496,8 @@ class EcovacsCurrentRoomSensor(
             self._rooms = event.rooms
 
         async def on_positions(event: PositionsEvent) -> None:
-            from deebot_client.events import PositionType
-
             for pos in event.positions:
-                if pos.type != PositionType.DEEBOT:
+                if getattr(pos.type, "name", None) != "DEEBOT":
                     continue
                 for room in self._rooms:
                     vertices = _parse_coordinates(room.coordinates)
