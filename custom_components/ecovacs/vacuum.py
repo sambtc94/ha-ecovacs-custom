@@ -74,17 +74,17 @@ def _decode_map_subsets_payload(subsets: str) -> dict[str, Any]:
 
     if payload.startswith(b"\x28\xB5\x2F\xFD"):
         result["zstd_magic_detected"] = True
-            try:
-                import zstd  # type: ignore[import-not-found]
+        try:
+            import zstd  # type: ignore[import-not-found]
 
-                decompressed = zstd.decompress(payload)
-                result["decompressor"] = "zstd"
-            except Exception as err:  # pragma: no cover - optional dependency path
-                result["zstd_decode_error"] = str(err)
-                result["hint"] = (
-                    "zstd payload detected; install python package 'zstd' to decode"
-                )
-                return result
+            decompressed = zstd.decompress(payload)
+            result["decompressor"] = "zstd"
+        except Exception as err:  # pragma: no cover - optional dependency path
+            result["zstd_decode_error"] = str(err)
+            result["hint"] = (
+                "zstd payload detected; install python package 'zstd' to decode"
+            )
+            return result
     else:
         candidates: list[tuple[str, Any]] = [
             ("zlib", zlib.decompress),
