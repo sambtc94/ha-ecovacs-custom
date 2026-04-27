@@ -120,12 +120,35 @@ def _decode_map_subsets_payload(subsets: str) -> dict[str, Any]:
                 result["json_keys"] = sorted(parsed.keys())
                 if "rooms" in parsed:
                     result["rooms"] = parsed["rooms"]
+            elif isinstance(parsed, list):
+                result["rooms"] = parsed
         except json.JSONDecodeError as err:
             result["json_decode_error"] = str(err)
     except UnicodeDecodeError as err:
         result["utf8_decode_error"] = str(err)
 
     return result
+
+
+def _extract_rooms_from_decoded_payload(decoded: Any) -> list[dict[str, Any]]:
+    """Extract room id/name pairs from decoded map_set payload."""
+    if not isinstance(decoded, list):
+        return []
+
+    rooms: list[dict[str, Any]] = []
+    for entry in decoded:
+        if not isinstance(entry, list) or len(entry) < 2:
+            continue
+
+        try:
+            room_id = int(entry[0])
+        except (TypeError, ValueError):
+            continue
+
+        room_name = str(entry[1]).strip() or f"Room {room_id}"
+        rooms.append({"id": room_id, "name": room_name})
+
+    return rooms
 # END CUSTOM CODE
 
 
@@ -315,6 +338,8 @@ class EcovacsVacuum(
         super().__init__(device, device.capabilities)
 
         self._room_event: RoomsEvent | None = None
+        self._fallback_rooms: list[dict[str, Any]] = []
+        self._fallback_map_id: str | None = None
         self._maps: dict[str, Map] = {}
 
         if fan_speed := self._capability.fan_speed:
@@ -348,6 +373,8 @@ class EcovacsVacuum(
 
             async def on_rooms(event: RoomsEvent) -> None:
                 self._room_event = event
+                self._fallback_rooms = []
+                self._fallback_map_id = None
                 self._check_segments_changed()
                 self.async_write_ha_state()
 
@@ -355,9 +382,17 @@ class EcovacsVacuum(
 
             async def on_map_info(event: CachedMapInfoEvent) -> None:
                 self._maps = {map_obj.id: map_obj for map_obj in event.maps}
+                fallback_loaded = await self._async_ensure_fallback_rooms()
                 self._check_segments_changed()
+                if fallback_loaded:
+                    self.async_write_ha_state()
 
             self._subscribe(map_caps.cached_info.event, on_map_info)
+
+            if last_rooms := self._device.events.get_last_event(RoomsEvent):
+                await on_rooms(last_rooms)
+            if last_map_info := self._device.events.get_last_event(CachedMapInfoEvent):
+                await on_map_info(last_map_info)
 
     @property
     def extra_state_attributes(self) -> Mapping[str, Any] | None:
@@ -367,20 +402,31 @@ class EcovacsVacuum(
         is lowercase snake_case.
         """
         rooms: dict[str, Any] = {}
-        if self._room_event is None:
+        room_entries: list[tuple[str, int]] = []
+
+        if self._room_event is not None:
+            room_entries = [(room.name, room.id) for room in self._room_event.rooms]
+        elif self._fallback_rooms:
+            room_entries = [
+                (str(room["name"]), int(room["id"]))
+                for room in self._fallback_rooms
+                if "name" in room and "id" in room
+            ]
+
+        if not room_entries:
             return rooms
 
-        for room in self._room_event.rooms:
+        for room_name_raw, room_id in room_entries:
             # convert room name to snake_case to meet the convention
-            room_name = slugify(room.name)
+            room_name = slugify(room_name_raw)
             room_values = rooms.get(room_name)
             if room_values is None:
-                rooms[room_name] = room.id
+                rooms[room_name] = room_id
             elif isinstance(room_values, list):
-                room_values.append(room.id)
+                room_values.append(room_id)
             else:
                 # Convert from int to list
-                rooms[room_name] = [room_values, room.id]
+                rooms[room_name] = [room_values, room_id]
 
         return {
             _ATTR_ROOMS: rooms,
@@ -591,6 +637,30 @@ class EcovacsVacuum(
             response["decoded_subsets"] = {"error": "no_subsets_payload"}
 
         return response
+
+    async def _async_ensure_fallback_rooms(self) -> bool:
+        """Populate fallback room list from decoded map set when RoomsEvent is missing."""
+        if self._room_event is not None or self._fallback_rooms:
+            return False
+
+        try:
+            decoded_response = await self.async_raw_get_map_set_decoded()
+        except ServiceValidationError:
+            return False
+        except Exception as err:  # pragma: no cover - defensive fallback
+            _LOGGER.debug("Unable to load fallback rooms from map set: %s", err)
+            return False
+
+        decoded_subsets = decoded_response.get("decoded_subsets", {})
+        decoded_rooms = decoded_subsets.get("rooms")
+        fallback_rooms = _extract_rooms_from_decoded_payload(decoded_rooms)
+        if not fallback_rooms:
+            return False
+
+        self._fallback_rooms = fallback_rooms
+        map_id = decoded_response.get("map_set_summary", {}).get("mid")
+        self._fallback_map_id = str(map_id) if map_id is not None else None
+        return True
     # END CUSTOM CODE
 
     @callback
@@ -609,22 +679,42 @@ class EcovacsVacuum(
     def _get_segments(self) -> list[Segment]:
         """Get the segments that can be cleaned."""
         last_seen = self.last_seen_segments or []
-        if self._room_event is None or not self._maps:
+        if not self._maps:
             # If we don't have the necessary information to determine segments, return the last
             # seen segments to avoid temporarily losing all segments until we get the necessary
             # information, which could cause unnecessary issues to be created
             return last_seen
 
-        map_id = self._room_event.map_id
+        room_entries: list[tuple[int, str]] = []
+        map_id: str | None = None
+
+        if self._room_event is not None:
+            map_id = self._room_event.map_id
+            room_entries = [(room.id, room.name) for room in self._room_event.rooms]
+        elif self._fallback_rooms:
+            map_id = self._fallback_map_id or next(
+                (map_obj.id for map_obj in self._maps.values() if map_obj.using),
+                None,
+            )
+            room_entries = [
+                (int(room["id"]), str(room["name"]))
+                for room in self._fallback_rooms
+                if "id" in room and "name" in room
+            ]
+
+        if map_id is None:
+            return last_seen
+
         if (map_obj := self._maps.get(map_id)) is None:
             _LOGGER.warning("Map ID %s not found in available maps", map_id)
             return []
 
         id_prefix = f"{map_id}{_SEGMENTS_SEPARATOR}"
+        current_map_id = self._room_event.map_id if self._room_event is not None else map_id
         other_map_ids = {
             map_obj.id
             for map_obj in self._maps.values()
-            if map_obj.id != self._room_event.map_id
+            if map_obj.id != current_map_id
         }
         # Include segments from the current map and any segments from other maps that were
         # previously seen, as we want to continue showing segments from other maps for
@@ -634,11 +724,11 @@ class EcovacsVacuum(
         ]
         segments.extend(
             Segment(
-                id=f"{id_prefix}{room.id}",
-                name=room.name,
+                id=f"{id_prefix}{room_id}",
+                name=room_name,
                 group=map_obj.name,
             )
-            for room in self._room_event.rooms
+            for room_id, room_name in room_entries
         )
         return segments
 
