@@ -157,6 +157,12 @@
       },
       "total_stats_time": {
         "default": "mdi:timer-outline"
+      },
+      "station_current_room": {
+        "default": "mdi:floor-plan-variant"
+      },
+      "current_room": {
+        "default": "mdi:map-marker"
       }
     },
     "switch": {

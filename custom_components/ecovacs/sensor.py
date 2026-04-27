@@ -524,7 +524,6 @@ class EcovacsCurrentRoomSensor(
         self._attr_name = "Current room"
         self._rooms: list = []
         self._map_id: str | None = None
-        self._attr_icon = "mdi:map-marker"
         self._attr_native_value: str | None = None
         self._attr_extra_state_attributes = {
             "x": None,
@@ -607,7 +606,6 @@ class EcovacsStationCurrentRoomSensor(
         self._rooms: list = []
         self._map_id: str | None = None
         self._attr_native_value: str | None = None
-        self._attr_icon = "mdi:map-marker"
         self._attr_extra_state_attributes = {
             "x": None,
             "y": None,

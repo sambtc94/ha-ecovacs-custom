@@ -303,8 +303,14 @@
     "vacuum_raw_get_map_info_not_supported": {
       "message": "Retrieving cached map metadata is not supported"
     },
+    "vacuum_raw_get_map_info_timeout": {
+      "message": "Timed out while retrieving cached map metadata"
+    },
     "vacuum_raw_get_map_set_not_supported": {
       "message": "Retrieving map set metadata is not supported"
+    },
+    "vacuum_raw_get_map_set_timeout": {
+      "message": "Timed out while retrieving map set metadata"
     },
     "vacuum_raw_get_map_set_map_unavailable": {
       "message": "Could not determine the active map id needed to retrieve map set metadata"

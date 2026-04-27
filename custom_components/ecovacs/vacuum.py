@@ -1,6 +1,7 @@
 """Support for Ecovacs Ecovacs Vacuums."""
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Mapping
 import logging
 from typing import TYPE_CHECKING, Any
@@ -440,7 +441,16 @@ class EcovacsVacuum(
             )
 
         if map_id is None and map_cap.rooms.get:
-            raw_map_info = await self._device.execute_command(map_cap.rooms.get[0])
+            try:
+                async with asyncio.timeout(20):
+                    raw_map_info = await self._device.execute_command(
+                        map_cap.rooms.get[0]
+                    )
+            except TimeoutError as err:
+                raise ServiceValidationError(
+                    translation_domain=DOMAIN,
+                    translation_key="vacuum_raw_get_map_info_timeout",
+                ) from err
             info = raw_map_info.get("resp", {}).get("body", {}).get("data", {}).get(
                 "info", []
             )
@@ -459,7 +469,14 @@ class EcovacsVacuum(
                 translation_key="vacuum_raw_get_map_set_map_unavailable",
             )
 
-        return await self._device.execute_command(map_cap.set.execute(map_id))
+        try:
+            async with asyncio.timeout(20):
+                return await self._device.execute_command(map_cap.set.execute(map_id))
+        except TimeoutError as err:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="vacuum_raw_get_map_set_timeout",
+            ) from err
     # END CUSTOM CODE
 
     @callback
