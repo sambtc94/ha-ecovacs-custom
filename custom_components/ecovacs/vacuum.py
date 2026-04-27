@@ -11,7 +11,6 @@ from deebot_client.events import (
     CachedMapInfoEvent,
     FanSpeedEvent,
     PositionsEvent,
-    PositionType,
     RoomsEvent,
     StateEvent,
 )
@@ -263,8 +262,9 @@ class EcovacsVacuum(
                 self._room_event = event
                 # BEGIN CUSTOM CODE
                 for room in event.rooms:
-                    _LOGGER.debug(
-                        "ROOM DEBUG: id=%s name=%s coordinates=%s",
+                    _LOGGER.warning(
+                        "ROOM DEBUG: map_id=%s id=%s name=%s coordinates=%s",
+                        event.map_id,
                         room.id,
                         room.name,
                         room.coordinates,
@@ -284,11 +284,12 @@ class EcovacsVacuum(
             # BEGIN CUSTOM CODE
             async def on_positions(event: PositionsEvent) -> None:
                 for pos in event.positions:
-                    _LOGGER.debug(
-                        "POS DEBUG: type=%s x=%s y=%s",
+                    _LOGGER.warning(
+                        "POS DEBUG: type=%s x=%s y=%s a=%s",
                         pos.type,
                         pos.x,
                         pos.y,
+                        pos.a,
                     )
 
             self._subscribe(map_caps.position.event, on_positions)

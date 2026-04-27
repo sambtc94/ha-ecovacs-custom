@@ -16,8 +16,9 @@ env/
 htmlcov/
 
 # VS Code workspace files
-.vscode/*
-!.vscode/tasks.json
+.vscode/
 
 # OS files
 .DS_Store
+
+update_ecovacs.sh
