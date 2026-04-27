@@ -6,7 +6,14 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from deebot_client.capabilities import CapabilityEvent, CapabilityLifeSpan, DeviceType
+from deebot_client.capabilities import (
+    CapabilityEvent,
+    CapabilityLifeSpan,
+# BEGIN CUSTOM CODE
+    CapabilityMap,
+# END CUSTOM CODE
+    DeviceType,
+)
 from deebot_client.device import Device
 from deebot_client.events import (
     BatteryEvent,
@@ -15,6 +22,10 @@ from deebot_client.events import (
     LifeSpan,
     LifeSpanEvent,
     NetworkInfoEvent,
+# BEGIN CUSTOM CODE
+    PositionsEvent,
+    RoomsEvent,
+# END CUSTOM CODE
     StatsEvent,
     TotalStatsEvent,
     station,
@@ -223,6 +234,13 @@ async def async_setup_entry(
         for device in controller.devices
         if (capability := device.capabilities.error)
     )
+    # BEGIN CUSTOM CODE
+    entities.extend(
+        EcovacsCurrentRoomSensor(device, caps)
+        for device in controller.devices
+        if (caps := device.capabilities.map)
+    )
+    # END CUSTOM CODE
 
     async_add_entities(entities)
 
@@ -421,3 +439,78 @@ class EcovacsLegacyLifespanSensor(EcovacsLegacyEntity, SensorEntity):
             self.schedule_update_ha_state()
 
         self._event_listeners.append(self.device.lifespanEvents.subscribe(on_event))
+
+
+# BEGIN CUSTOM CODE
+def _parse_coordinates(coords_str: str) -> list[tuple[int, int]]:
+    """Parse semicolon-delimited 'x,y' coordinate string into a list of tuples."""
+    vertices = []
+    for pair in coords_str.split(";"):
+        parts = pair.split(",")
+        if len(parts) == 2:
+            try:
+                vertices.append((int(parts[0]), int(parts[1])))
+            except ValueError:
+                pass
+    return vertices
+
+
+def _point_in_polygon(px: int, py: int, vertices: list[tuple[int, int]]) -> bool:
+    """Return True if point (px, py) is inside the polygon using ray casting."""
+    inside = False
+    n = len(vertices)
+    j = n - 1
+    for i in range(n):
+        xi, yi = vertices[i]
+        xj, yj = vertices[j]
+        if ((yi > py) != (yj > py)) and (
+            px < (xj - xi) * (py - yi) / (yj - yi) + xi
+        ):
+            inside = not inside
+        j = i
+    return inside
+
+
+class EcovacsCurrentRoomSensor(
+    EcovacsEntity[CapabilityMap],
+    SensorEntity,
+):
+    """Sensor reporting the room the vacuum is currently in."""
+
+    entity_description = SensorEntityDescription(
+        key="current_room",
+        translation_key="current_room",
+    )
+
+    def __init__(self, device: Device, capability: CapabilityMap) -> None:
+        """Initialize entity."""
+        super().__init__(device, capability)
+        self._rooms: list = []
+        self._attr_native_value: str | None = None
+
+    async def async_added_to_hass(self) -> None:
+        """Set up the event listeners now that hass is ready."""
+        await super().async_added_to_hass()
+
+        async def on_rooms(event: RoomsEvent) -> None:
+            self._rooms = event.rooms
+
+        async def on_positions(event: PositionsEvent) -> None:
+            from deebot_client.events import PositionType
+
+            for pos in event.positions:
+                if pos.type != PositionType.DEEBOT:
+                    continue
+                for room in self._rooms:
+                    vertices = _parse_coordinates(room.coordinates)
+                    if vertices and _point_in_polygon(pos.x, pos.y, vertices):
+                        self._attr_native_value = room.name
+                        self.async_write_ha_state()
+                        return
+                self._attr_native_value = None
+                self.async_write_ha_state()
+                return
+
+        self._subscribe(self._capability.rooms.event, on_rooms)
+        self._subscribe(self._capability.position.event, on_positions)
+# END CUSTOM CODE

@@ -10,7 +10,6 @@ from deebot_client.device import Device
 from deebot_client.events import (
     CachedMapInfoEvent,
     FanSpeedEvent,
-    PositionsEvent,
     RoomsEvent,
     StateEvent,
 )
@@ -260,24 +259,6 @@ class EcovacsVacuum(
 
             async def on_rooms(event: RoomsEvent) -> None:
                 self._room_event = event
-                # BEGIN CUSTOM CODE
-                device_name = self._device.device_info.get(
-                    "nick", self._device.device_info["name"]
-                )
-                for room in event.rooms:
-                    _LOGGER.warning(
-                        (
-                            "ROOM DEBUG: entity_id=%s device=%s map_id=%s "
-                            "id=%s name=%s coordinates=%s"
-                        ),
-                        self.entity_id,
-                        device_name,
-                        event.map_id,
-                        room.id,
-                        room.name,
-                        room.coordinates,
-                    )
-                # END CUSTOM CODE
                 self._check_segments_changed()
                 self.async_write_ha_state()
 
@@ -288,28 +269,6 @@ class EcovacsVacuum(
                 self._check_segments_changed()
 
             self._subscribe(map_caps.cached_info.event, on_map_info)
-
-            # BEGIN CUSTOM CODE
-            async def on_positions(event: PositionsEvent) -> None:
-                device_name = self._device.device_info.get(
-                    "nick", self._device.device_info["name"]
-                )
-                for pos in event.positions:
-                    _LOGGER.warning(
-                        (
-                            "POS DEBUG: entity_id=%s device=%s type=%s "
-                            "x=%s y=%s a=%s"
-                        ),
-                        self.entity_id,
-                        device_name,
-                        pos.type,
-                        pos.x,
-                        pos.y,
-                        pos.a,
-                    )
-
-            self._subscribe(map_caps.position.event, on_positions)
-            # END CUSTOM CODE
 
     @property
     def extra_state_attributes(self) -> Mapping[str, Any] | None:
