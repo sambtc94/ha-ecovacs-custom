@@ -1,5 +1,4 @@
 """Support for Ecovacs Ecovacs Vacuums."""
-#Custom
 from __future__ import annotations
 
 from collections.abc import Mapping
