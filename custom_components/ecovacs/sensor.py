@@ -584,9 +584,9 @@ async def _fetch_room_centers_once(
     did = device.device_info["did"]
     if did in _ROOM_CENTERS_FETCHED_DIDS:
         return []
-    _ROOM_CENTERS_FETCHED_DIDS.add(did)
 
     if capability.set is None:
+        _ROOM_CENTERS_FETCHED_DIDS.add(did)
         return []
 
     # Resolve active map id
@@ -615,6 +615,9 @@ async def _fetch_room_centers_once(
             resp = await device.execute_command(capability.set.execute(map_id))
     except Exception:  # noqa: BLE001
         return []
+
+    # Mark as fetched after successfully calling map set to avoid repeated API calls.
+    _ROOM_CENTERS_FETCHED_DIDS.add(did)
 
     subsets = resp.get("resp", {}).get("body", {}).get("data", {}).get("subsets")
     if not isinstance(subsets, str) or not subsets:
@@ -686,6 +689,20 @@ class EcovacsCurrentRoomSensor(
         """Set up the event listeners now that hass is ready."""
         await super().async_added_to_hass()
 
+        async def ensure_room_centers() -> None:
+            if self._rooms or self._room_centers:
+                return
+
+            centers = await _fetch_room_centers_once(self._device, self._capability)
+            if centers:
+                self._room_centers = centers
+                self._attr_extra_state_attributes["available_room_ids"] = [
+                    c["id"] for c in centers
+                ]
+                self._attr_extra_state_attributes["available_rooms"] = {
+                    c["name"]: c["id"] for c in centers
+                }
+
         async def on_rooms(event: RoomsEvent) -> None:
             self._rooms = event.rooms
             self._map_id = event.map_id
@@ -700,18 +717,7 @@ class EcovacsCurrentRoomSensor(
         async def on_positions(event: PositionsEvent) -> None:
             if not self._rooms:
                 _request_rooms_refresh_once(self._device, self._capability)
-                if not self._room_centers:
-                    centers = await _fetch_room_centers_once(
-                        self._device, self._capability
-                    )
-                    if centers:
-                        self._room_centers = centers
-                        self._attr_extra_state_attributes["available_room_ids"] = [
-                            c["id"] for c in centers
-                        ]
-                        self._attr_extra_state_attributes["available_rooms"] = {
-                            c["name"]: c["id"] for c in centers
-                        }
+                await ensure_room_centers()
 
             for pos in event.positions:
                 position_type = getattr(pos.type, "name", str(pos.type)).upper()
@@ -724,8 +730,15 @@ class EcovacsCurrentRoomSensor(
         self._subscribe(self._capability.rooms.event, on_rooms)
         self._subscribe(self._capability.position.event, on_positions)
 
+        async def on_map_info(_: CachedMapInfoEvent) -> None:
+            await ensure_room_centers()
+
+        self._subscribe(self._capability.cached_info.event, on_map_info)
+
         if last_rooms := self._device.events.get_last_event(RoomsEvent):
             await on_rooms(last_rooms)
+        if last_cached := self._device.events.get_last_event(CachedMapInfoEvent):
+            await on_map_info(last_cached)
         if last_positions := self._device.events.get_last_event(PositionsEvent):
             await on_positions(last_positions)
 
@@ -784,6 +797,20 @@ class EcovacsStationCurrentRoomSensor(
         """Set up the event listeners now that hass is ready."""
         await super().async_added_to_hass()
 
+        async def ensure_room_centers() -> None:
+            if self._rooms or self._room_centers:
+                return
+
+            centers = await _fetch_room_centers_once(self._device, self._capability)
+            if centers:
+                self._room_centers = centers
+                self._attr_extra_state_attributes["available_room_ids"] = [
+                    c["id"] for c in centers
+                ]
+                self._attr_extra_state_attributes["available_rooms"] = {
+                    c["name"]: c["id"] for c in centers
+                }
+
         async def on_rooms(event: RoomsEvent) -> None:
             self._rooms = event.rooms
             self._map_id = event.map_id
@@ -798,18 +825,7 @@ class EcovacsStationCurrentRoomSensor(
         async def on_positions(event: PositionsEvent) -> None:
             if not self._rooms:
                 _request_rooms_refresh_once(self._device, self._capability)
-                if not self._room_centers:
-                    centers = await _fetch_room_centers_once(
-                        self._device, self._capability
-                    )
-                    if centers:
-                        self._room_centers = centers
-                        self._attr_extra_state_attributes["available_room_ids"] = [
-                            c["id"] for c in centers
-                        ]
-                        self._attr_extra_state_attributes["available_rooms"] = {
-                            c["name"]: c["id"] for c in centers
-                        }
+                await ensure_room_centers()
 
             for pos in event.positions:
                 position_type = getattr(pos.type, "name", str(pos.type)).upper()
@@ -820,8 +836,15 @@ class EcovacsStationCurrentRoomSensor(
         self._subscribe(self._capability.rooms.event, on_rooms)
         self._subscribe(self._capability.position.event, on_positions)
 
+        async def on_map_info(_: CachedMapInfoEvent) -> None:
+            await ensure_room_centers()
+
+        self._subscribe(self._capability.cached_info.event, on_map_info)
+
         if last_rooms := self._device.events.get_last_event(RoomsEvent):
             await on_rooms(last_rooms)
+        if last_cached := self._device.events.get_last_event(CachedMapInfoEvent):
+            await on_map_info(last_cached)
         if last_positions := self._device.events.get_last_event(PositionsEvent):
             await on_positions(last_positions)
 # END CUSTOM CODE
