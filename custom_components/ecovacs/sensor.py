@@ -514,9 +514,9 @@ def _extract_room_centers_from_subsets(subsets_b64: str) -> list[dict[str, Any]]
 
     if payload.startswith(b"\x28\xB5\x2F\xFD"):
         try:
-            import zstandard  # type: ignore[import-not-found]
+            import zstd  # type: ignore[import-not-found]
 
-            decompressed = zstandard.ZstdDecompressor().decompress(payload)
+            decompressed = zstd.decompress(payload)
         except Exception:  # noqa: BLE001
             return []
     else:
