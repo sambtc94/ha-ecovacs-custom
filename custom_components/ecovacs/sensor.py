@@ -240,6 +240,11 @@ async def async_setup_entry(
         for device in controller.devices
         if (caps := device.capabilities.map)
     )
+    entities.extend(
+        EcovacsBaseStationCurrentRoomSensor(device, caps)
+        for device in controller.devices
+        if (caps := device.capabilities.map)
+    )
     # END CUSTOM CODE
 
     async_add_entities(entities)
@@ -471,6 +476,20 @@ def _point_in_polygon(px: int, py: int, vertices: list[tuple[int, int]]) -> bool
     return inside
 
 
+def _resolve_room_for_coordinates(
+    rooms: list[Any],
+    x: int,
+    y: int,
+) -> tuple[str | None, int | None]:
+    """Resolve the room name/id for given map coordinates."""
+    for room in rooms:
+        vertices = _parse_coordinates(room.coordinates)
+        if vertices and _point_in_polygon(x, y, vertices):
+            return room.name, room.id
+
+    return None, None
+
+
 class EcovacsCurrentRoomSensor(
     EcovacsEntity[CapabilityMap],
     SensorEntity,
@@ -503,16 +522,9 @@ class EcovacsCurrentRoomSensor(
         self._attr_extra_state_attributes["angle"] = angle
         self._attr_extra_state_attributes["map_id"] = self._map_id
 
-        for room in self._rooms:
-            vertices = _parse_coordinates(room.coordinates)
-            if vertices and _point_in_polygon(x, y, vertices):
-                self._attr_native_value = room.name
-                self._attr_extra_state_attributes["room_id"] = room.id
-                self.async_write_ha_state()
-                return
-
-        self._attr_native_value = None
-        self._attr_extra_state_attributes["room_id"] = None
+        room_name, room_id = _resolve_room_for_coordinates(self._rooms, x, y)
+        self._attr_native_value = room_name
+        self._attr_extra_state_attributes["room_id"] = room_id
         self.async_write_ha_state()
 
     async def async_added_to_hass(self) -> None:
@@ -532,6 +544,65 @@ class EcovacsCurrentRoomSensor(
 
                 self._set_room_from_position(pos.x, pos.y, pos.a)
                 return
+
+        self._subscribe(self._capability.rooms.event, on_rooms)
+        self._subscribe(self._capability.position.event, on_positions)
+        self._device.events.request_refresh(self._capability.rooms.event)
+        self._device.events.request_refresh(self._capability.position.event)
+
+
+class EcovacsBaseStationCurrentRoomSensor(
+    EcovacsEntity[CapabilityMap],
+    SensorEntity,
+):
+    """Sensor reporting the room of the base station."""
+
+    entity_description = SensorEntityDescription(
+        key="base_station_current_room",
+        translation_key="base_station_current_room",
+    )
+
+    def __init__(self, device: Device, capability: CapabilityMap) -> None:
+        """Initialize entity."""
+        super().__init__(device, capability)
+        self._rooms: list = []
+        self._map_id: str | None = None
+        self._attr_native_value: str | None = None
+        self._attr_extra_state_attributes = {
+            "x": None,
+            "y": None,
+            "angle": None,
+            "room_id": None,
+            "map_id": None,
+        }
+
+    def _set_base_station_from_position(self, x: int, y: int, angle: int | None) -> None:
+        """Update state from the provided base station map position."""
+        self._attr_extra_state_attributes["x"] = x
+        self._attr_extra_state_attributes["y"] = y
+        self._attr_extra_state_attributes["angle"] = angle
+        self._attr_extra_state_attributes["map_id"] = self._map_id
+
+        room_name, room_id = _resolve_room_for_coordinates(self._rooms, x, y)
+        self._attr_native_value = room_name
+        self._attr_extra_state_attributes["room_id"] = room_id
+        self.async_write_ha_state()
+
+    async def async_added_to_hass(self) -> None:
+        """Set up the event listeners now that hass is ready."""
+        await super().async_added_to_hass()
+
+        async def on_rooms(event: RoomsEvent) -> None:
+            self._rooms = event.rooms
+            self._map_id = event.map_id
+            self._attr_extra_state_attributes["map_id"] = event.map_id
+
+        async def on_positions(event: PositionsEvent) -> None:
+            for pos in event.positions:
+                position_type = getattr(pos.type, "name", str(pos.type)).upper()
+                if any(token in position_type for token in ("CHARG", "STATION", "DOCK")):
+                    self._set_base_station_from_position(pos.x, pos.y, pos.a)
+                    return
 
         self._subscribe(self._capability.rooms.event, on_rooms)
         self._subscribe(self._capability.position.event, on_positions)

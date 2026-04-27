@@ -170,6 +170,9 @@
       "current_room": {
         "name": "Current room"
       },
+      "base_station_current_room": {
+        "name": "Base station current room"
+      },
       "lifespan_air_freshener": {
         "name": "Air freshener lifespan"
       },
