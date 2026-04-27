@@ -146,7 +146,11 @@ def _extract_rooms_from_decoded_payload(decoded: Any) -> list[dict[str, Any]]:
             continue
 
         room_name = str(entry[1]).strip() or f"Room {room_id}"
-        rooms.append({"id": room_id, "name": room_name})
+        rooms.append({
+            "id": room_id,
+            "name": room_name,
+            "command_id": entry[0],
+        })
 
     return rooms
 # END CUSTOM CODE
@@ -661,6 +665,22 @@ class EcovacsVacuum(
         map_id = decoded_response.get("map_set_summary", {}).get("mid")
         self._fallback_map_id = str(map_id) if map_id is not None else None
         return True
+
+    def _get_fallback_command_id_for_segment(
+        self,
+        segment_id: str,
+    ) -> int | float | str | None:
+        """Map a fallback segment id to the command id expected by the device."""
+        for room in self._fallback_rooms:
+            if str(room.get("id")) == segment_id:
+                command_id = room.get("command_id", room.get("id"))
+                if isinstance(command_id, (int, float)):
+                    return command_id
+                if isinstance(command_id, str):
+                    return command_id
+                return None
+
+        return None
     # END CUSTOM CODE
 
     @callback
@@ -745,9 +765,27 @@ class EcovacsVacuum(
             _LOGGER.warning("No map information available, cannot clean segments")
             return
 
-        valid_room_ids: list[int | float] = []
+        valid_room_ids: list[int | float | str] = []
+        fallback_map_id = self._fallback_map_id or next(
+            (map_obj.id for map_obj in self._maps.values() if map_obj.using),
+            None,
+        )
+        fallback_mode = self._room_event is None and bool(self._fallback_rooms)
+
         for composite_id in segment_ids:
             map_id, segment_id = _split_composite_id(composite_id)
+
+            if fallback_mode and fallback_map_id is not None and map_id == fallback_map_id:
+                command_id = self._get_fallback_command_id_for_segment(segment_id)
+                if command_id is None:
+                    _LOGGER.warning(
+                        "Fallback segment ID %s not found in decoded rooms", segment_id
+                    )
+                    continue
+
+                valid_room_ids.append(command_id)
+                continue
+
             if (map_obj := self._maps.get(map_id)) is None:
                 _LOGGER.warning("Map ID %s not found in available maps", map_id)
                 continue
