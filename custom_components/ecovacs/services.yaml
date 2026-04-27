@@ -15,3 +15,9 @@ raw_get_map_set:
     entity:
       domain: vacuum
       integration: ecovacs
+
+raw_get_map_set_decoded:
+  target:
+    entity:
+      domain: vacuum
+      integration: ecovacs

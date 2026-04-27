@@ -12,6 +12,7 @@ SERVICE_RAW_GET_POSITIONS = "raw_get_positions"
 # BEGIN CUSTOM CODE
 SERVICE_RAW_GET_MAP_INFO = "raw_get_map_info"
 SERVICE_RAW_GET_MAP_SET = "raw_get_map_set"
+SERVICE_RAW_GET_MAP_SET_DECODED = "raw_get_map_set_decoded"
 # END CUSTOM CODE
 
 
@@ -47,6 +48,15 @@ def async_setup_services(hass: HomeAssistant) -> None:
         entity_domain=VACUUM_DOMAIN,
         schema=None,
         func="async_raw_get_map_set",
+        supports_response=SupportsResponse.ONLY,
+    )
+    service.async_register_platform_entity_service(
+        hass,
+        DOMAIN,
+        SERVICE_RAW_GET_MAP_SET_DECODED,
+        entity_domain=VACUUM_DOMAIN,
+        schema=None,
+        func="async_raw_get_map_set_decoded",
         supports_response=SupportsResponse.ONLY,
     )
     # END CUSTOM CODE

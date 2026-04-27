@@ -2,9 +2,16 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
+import bz2
 from collections.abc import Mapping
+import gzip
+import json
+import lzma
 import logging
 from typing import TYPE_CHECKING, Any
+import zlib
 
 from deebot_client.capabilities import Capabilities, DeviceType
 from deebot_client.device import Device
@@ -39,6 +46,87 @@ _LOGGER = logging.getLogger(__name__)
 _SEGMENTS_SEPARATOR = "_"
 
 ATTR_ERROR = "error"
+
+
+# BEGIN CUSTOM CODE
+def _decode_map_subsets_payload(subsets: str) -> dict[str, Any]:
+    """Decode and inspect map subsets payload."""
+    result: dict[str, Any] = {
+        "subsets_length": len(subsets),
+        "base64_valid": False,
+    }
+
+    try:
+        payload = base64.b64decode(subsets, validate=True)
+    except (binascii.Error, ValueError) as err:
+        result["error"] = f"invalid_base64: {err}"
+        return result
+
+    result["base64_valid"] = True
+    result["decoded_length"] = len(payload)
+    result["magic_hex"] = payload[:8].hex()
+    result["magic_ascii"] = "".join(
+        chr(byte) if 32 <= byte <= 126 else "." for byte in payload[:8]
+    )
+    result["decoded_preview_hex"] = payload[:64].hex()
+
+    decompressed: bytes | None = None
+
+    if payload.startswith(b"\x28\xB5\x2F\xFD"):
+        result["zstd_magic_detected"] = True
+        try:
+            import zstandard  # type: ignore[import-not-found]
+
+            decompressed = zstandard.ZstdDecompressor().decompress(payload)
+            result["decompressor"] = "zstd"
+        except Exception as err:  # pragma: no cover - optional dependency path
+            result["zstd_decode_error"] = str(err)
+            result["hint"] = (
+                "zstd payload detected; install python package 'zstandard' to decode"
+            )
+            return result
+    else:
+        candidates: list[tuple[str, Any]] = [
+            ("zlib", zlib.decompress),
+            ("gzip", gzip.decompress),
+            ("bz2", bz2.decompress),
+            ("lzma", lzma.decompress),
+            ("deflate_raw", lambda data: zlib.decompress(data, -zlib.MAX_WBITS)),
+        ]
+
+        decode_errors: dict[str, str] = {}
+        for name, decoder in candidates:
+            try:
+                decompressed = decoder(payload)
+                result["decompressor"] = name
+                break
+            except Exception as err:  # pragma: no cover - diagnostic path
+                decode_errors[name] = str(err)
+
+        if decompressed is None:
+            result["decode_errors"] = decode_errors
+            return result
+
+    result["decompressed_length"] = len(decompressed)
+    result["decompressed_preview_hex"] = decompressed[:64].hex()
+
+    try:
+        decoded_text = decompressed.decode("utf-8")
+        result["utf8_preview"] = decoded_text[:400]
+        try:
+            parsed = json.loads(decoded_text)
+            result["json_parsed"] = parsed
+            if isinstance(parsed, dict):
+                result["json_keys"] = sorted(parsed.keys())
+                if "rooms" in parsed:
+                    result["rooms"] = parsed["rooms"]
+        except json.JSONDecodeError as err:
+            result["json_decode_error"] = str(err)
+    except UnicodeDecodeError as err:
+        result["utf8_decode_error"] = str(err)
+
+    return result
+# END CUSTOM CODE
 
 
 async def async_setup_entry(
@@ -477,6 +565,32 @@ class EcovacsVacuum(
                 translation_domain=DOMAIN,
                 translation_key="vacuum_raw_get_map_set_timeout",
             ) from err
+
+    async def async_raw_get_map_set_decoded(
+        self,
+    ) -> dict[str, Any]:
+        """Get map set and decoded subsets diagnostics."""
+        raw = await self.async_raw_get_map_set()
+
+        data = raw.get("resp", {}).get("body", {}).get("data", {})
+        subsets = data.get("subsets")
+
+        response: dict[str, Any] = {
+            "map_set_summary": {
+                "mid": data.get("mid"),
+                "msid": data.get("msid"),
+                "type": data.get("type"),
+                "infoSize": data.get("infoSize"),
+            },
+            "raw": raw,
+        }
+
+        if isinstance(subsets, str) and subsets:
+            response["decoded_subsets"] = _decode_map_subsets_payload(subsets)
+        else:
+            response["decoded_subsets"] = {"error": "no_subsets_payload"}
+
+        return response
     # END CUSTOM CODE
 
     @callback

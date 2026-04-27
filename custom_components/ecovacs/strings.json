@@ -342,6 +342,10 @@
     "raw_get_map_set": {
       "description": "Retrieves a raw response containing map set metadata.",
       "name": "Get raw map set"
+    },
+    "raw_get_map_set_decoded": {
+      "description": "Retrieves map set metadata and returns a decoded analysis of the subsets payload.",
+      "name": "Get decoded raw map set"
     }
   }
 }
