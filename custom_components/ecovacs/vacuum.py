@@ -426,7 +426,40 @@ class EcovacsVacuum(
                 translation_key="vacuum_raw_get_map_set_not_supported",
             )
 
-        return await self._device.execute_command(map_cap.set.execute())
+        map_id = next(
+            (map_obj.id for map_obj in self._maps.values() if map_obj.using),
+            None,
+        )
+
+        if map_id is None and (
+            cached_map_info := self._device.events.get_last_event(CachedMapInfoEvent)
+        ):
+            map_id = next(
+                (map_obj.id for map_obj in cached_map_info.maps if map_obj.using),
+                None,
+            )
+
+        if map_id is None and map_cap.rooms.get:
+            raw_map_info = await self._device.execute_command(map_cap.rooms.get[0])
+            info = raw_map_info.get("resp", {}).get("body", {}).get("data", {}).get(
+                "info", []
+            )
+            map_id = next(
+                (
+                    map_info.get("mid")
+                    for map_info in info
+                    if map_info.get("using") == 1 and map_info.get("mid") not in (None, "0", "")
+                ),
+                None,
+            )
+
+        if map_id is None:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="vacuum_raw_get_map_set_map_unavailable",
+            )
+
+        return await self._device.execute_command(map_cap.set.execute(map_id))
     # END CUSTOM CODE
 
     @callback
