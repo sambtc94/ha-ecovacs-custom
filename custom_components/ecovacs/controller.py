@@ -1,8 +1,6 @@
 """Controller module."""
 
 from __future__ import annotations
-
-import asyncio
 from collections.abc import Mapping
 from functools import partial
 import logging
@@ -84,18 +82,11 @@ class EcovacsController:
 
             if devices.mqtt:
                 mqtt = await self._get_mqtt_client()
-                mqtt_devices = [
-                    Device(info, self._authenticator) for info in devices.mqtt
-                ]
-                async with asyncio.TaskGroup() as tg:
-
-                    async def _init(device: Device) -> None:
-                        """Initialize MQTT device."""
-                        await device.initialize(mqtt)
-                        self._devices.append(device)
-
-                    for device in mqtt_devices:
-                        tg.create_task(_init(device))
+                # Initialize devices sequentially to avoid startup connection bursts.
+                for info in devices.mqtt:
+                    device = Device(info, self._authenticator)
+                    await device.initialize(mqtt)
+                    self._devices.append(device)
 
             for device_config in devices.xmpp:
                 bot = VacBot(

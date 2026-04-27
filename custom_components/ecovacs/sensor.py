@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-# BEGIN CUSTOM CODE
-import logging
-# END CUSTOM CODE
-
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -64,10 +60,6 @@ from .entity import (
     EcovacsLegacyEntity,
 )
 from .util import get_name_key, get_options, get_supported_entities
-
-# BEGIN CUSTOM CODE
-_LOGGER = logging.getLogger(__name__)
-# END CUSTOM CODE
 
 
 @dataclass(kw_only=True, frozen=True)
@@ -249,7 +241,7 @@ async def async_setup_entry(
         if (caps := device.capabilities.map)
     )
     entities.extend(
-        EcovacsBaseStationCurrentRoomSensor(device, caps)
+        EcovacsStationCurrentRoomSensor(device, caps)
         for device in controller.devices
         if (caps := device.capabilities.map)
     )
@@ -561,20 +553,23 @@ class EcovacsCurrentRoomSensor(
 
         self._subscribe(self._capability.rooms.event, on_rooms)
         self._subscribe(self._capability.position.event, on_positions)
-        self._device.events.request_refresh(self._capability.rooms.event)
-        self._device.events.request_refresh(self._capability.position.event)
+
+        if last_rooms := self._device.events.get_last_event(RoomsEvent):
+            await on_rooms(last_rooms)
+        if last_positions := self._device.events.get_last_event(PositionsEvent):
+            await on_positions(last_positions)
 
 
-class EcovacsBaseStationCurrentRoomSensor(
+class EcovacsStationCurrentRoomSensor(
     EcovacsEntity[CapabilityMap],
     SensorEntity,
 ):
     """Sensor reporting the room of the base station."""
 
     entity_description = SensorEntityDescription(
-        key="base_station_current_room",
-        translation_key="base_station_current_room",
-        name="Base station current room",
+        key="station_current_room",
+        translation_key="station_current_room",
+        name="Station current room",
     )
 
     def __init__(self, device: Device, capability: CapabilityMap) -> None:
@@ -584,7 +579,7 @@ class EcovacsBaseStationCurrentRoomSensor(
         self._attr_unique_id = (
             f"{device.device_info['did']}_{self.entity_description.key}_sensor"
         )
-        self._attr_name = "Base station current room"
+        self._attr_name = "Station current room"
         self._rooms: list = []
         self._map_id: str | None = None
         self._attr_native_value: str | None = None
@@ -617,46 +612,19 @@ class EcovacsBaseStationCurrentRoomSensor(
             self._rooms = event.rooms
             self._map_id = event.map_id
             self._attr_extra_state_attributes["map_id"] = event.map_id
-            _LOGGER.warning(
-                "BASE ROOM DEBUG: entity_id=%s map_id=%s room_count=%s",
-                self.entity_id,
-                event.map_id,
-                len(event.rooms),
-            )
 
         async def on_positions(event: PositionsEvent) -> None:
-            seen_types: list[str] = []
             for pos in event.positions:
-                position_type_raw = getattr(pos.type, "name", str(pos.type))
-                position_type = position_type_raw.upper()
-                seen_types.append(position_type)
-                _LOGGER.warning(
-                    (
-                        "BASE POS DEBUG: entity_id=%s type=%s x=%s y=%s a=%s"
-                    ),
-                    self.entity_id,
-                    position_type_raw,
-                    pos.x,
-                    pos.y,
-                    pos.a,
-                )
+                position_type = getattr(pos.type, "name", str(pos.type)).upper()
                 if any(token in position_type for token in ("CHARG", "STATION", "DOCK")):
-                    _LOGGER.warning(
-                        "BASE POS MATCH: entity_id=%s matched_type=%s",
-                        self.entity_id,
-                        position_type_raw,
-                    )
                     self._set_base_station_from_position(pos.x, pos.y, pos.a)
                     return
 
-            _LOGGER.warning(
-                "BASE POS NO MATCH: entity_id=%s seen_types=%s",
-                self.entity_id,
-                seen_types,
-            )
-
         self._subscribe(self._capability.rooms.event, on_rooms)
         self._subscribe(self._capability.position.event, on_positions)
-        self._device.events.request_refresh(self._capability.rooms.event)
-        self._device.events.request_refresh(self._capability.position.event)
+
+        if last_rooms := self._device.events.get_last_event(RoomsEvent):
+            await on_rooms(last_rooms)
+        if last_positions := self._device.events.get_last_event(PositionsEvent):
+            await on_positions(last_positions)
 # END CUSTOM CODE
