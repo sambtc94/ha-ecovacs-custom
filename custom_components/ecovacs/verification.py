@@ -32,7 +32,8 @@ _META = {
 }
 _ANDROID_MODEL = "Pixel 7"
 _ANDROID_SYSTEM = "Android 14"
-_TIMEOUT = ClientTimeout(60)
+_API_TIMEOUT_SECONDS = 60
+_TIMEOUT = ClientTimeout(_API_TIMEOUT_SECONDS)
 
 
 class DeviceVerificationRequiredError(AuthenticationError):

@@ -92,7 +92,7 @@ def _create_rest_configuration(
     )
 
 
-def _create_authenticator(
+def _create_ecovacs_authenticator(
     hass: HomeAssistant, user_input: Mapping[str, Any], device_id: str
 ) -> Authenticator:
     """Create an authenticator for the current flow."""
@@ -122,7 +122,7 @@ async def _validate_input(
         return ValidationResult(errors)
 
     country = user_input[CONF_COUNTRY]
-    authenticator = _create_authenticator(hass, user_input, device_id)
+    authenticator = _create_ecovacs_authenticator(hass, user_input, device_id)
 
     try:
         await authenticator.authenticate()
@@ -180,7 +180,7 @@ class EcovacsConfigFlow(ConfigFlow, domain=DOMAIN):
     _mode: InstanceMode = InstanceMode.CLOUD
 
     def __init__(self) -> None:
-        """Initialize the config flow."""
+        """Initialize verification state used across config and reauth steps."""
         self._pending_user_input: dict[str, Any] | None = None
         self._pending_device_id: str | None = None
         self._reauth_entry: ConfigEntry | None = None
