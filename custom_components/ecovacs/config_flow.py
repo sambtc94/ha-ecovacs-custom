@@ -248,6 +248,12 @@ class EcovacsConfigFlow(ConfigFlow, domain=DOMAIN):
                         data={**user_input, CONF_DEVICE_ID: device_id},
                     )
 
+        return self._show_auth_form(user_input, errors)
+
+    def _show_auth_form(
+        self, user_input: dict[str, Any] | None, errors: dict[str, str]
+    ) -> ConfigFlowResult:
+        """Show the Ecovacs auth form."""
         schema: VolDictType = {
             vol.Required(CONF_USERNAME): selector.TextSelector(
                 selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT)
@@ -321,7 +327,9 @@ class EcovacsConfigFlow(ConfigFlow, domain=DOMAIN):
                     if validation.requires_device_verification:
                         errors["base"] = "unknown"
                     else:
-                        return await self.async_step_auth(self._pending_user_input)
+                        return self._show_auth_form(
+                            self._pending_user_input, validation.errors
+                        )
                 else:
                     if self._reauth_entry is not None:
                         return self.async_update_reload_and_abort(

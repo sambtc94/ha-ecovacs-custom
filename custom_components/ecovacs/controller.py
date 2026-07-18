@@ -125,7 +125,9 @@ class EcovacsController:
             raise ConfigEntryError("Invalid credentials") from ex
         except AuthenticationError as ex:
             if is_device_verification_required_error(ex):
-                raise ConfigEntryAuthFailed("Ecovacs device verification required") from ex
+                raise ConfigEntryAuthFailed(
+                    "Ecovacs device verification required. Check your email and complete the integration reauthentication flow."
+                ) from ex
             raise ConfigEntryNotReady("Error during setup") from ex
         except DeebotError as ex:
             raise ConfigEntryNotReady("Error during setup") from ex
