@@ -324,7 +324,7 @@ class EcovacsConfigFlow(ConfigFlow, domain=DOMAIN):
                 )
                 if validation.errors:
                     if validation.requires_device_verification:
-                        errors["base"] = "unknown"
+                        errors["base"] = "verification_required"
                     else:
                         return self._show_auth_form(
                             self._pending_user_input, validation.errors

@@ -10,6 +10,7 @@
       "invalid_url": "Invalid URL",
       "invalid_url_schema_override_mqtt_url": "Invalid MQTT URL scheme.\nThe URL should start with `mqtt://` or `mqtts://`.",
       "invalid_url_schema_override_rest_url": "Invalid REST URL scheme.\nThe URL should start with `http://` or `https://`.",
+      "verification_required": "Device verification is still required. Request a new code and try again.",
       "unknown": "[%key:common::config_flow::error::unknown%]"
     },
     "step": {
