@@ -6,6 +6,7 @@
     "error": {
       "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
       "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]",
+      "invalid_verification_code": "Invalid or expired verification code",
       "invalid_url": "Invalid URL",
       "invalid_url_schema_override_mqtt_url": "Invalid MQTT URL scheme.\nThe URL should start with `mqtt://` or `mqtts://`.",
       "invalid_url_schema_override_rest_url": "Invalid REST URL scheme.\nThe URL should start with `http://` or `https://`.",
@@ -25,6 +26,12 @@
           "override_mqtt_url": "Enter the MQTT URL of your self-hosted instance including the scheme (mqtt/mqtts).",
           "override_rest_url": "Enter the REST URL of your self-hosted instance including the scheme (http/https)."
         }
+      },
+      "verify_device": {
+        "data": {
+          "verification_code": "Verification code"
+        },
+        "description": "Ecovacs emailed a one-time verification code to {email} for device `{device_id}`. Enter that code here to trust this Home Assistant device."
       },
       "user": {
         "data": {

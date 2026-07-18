@@ -49,6 +49,11 @@ Attributes:
 
 If `available_room_ids` stays empty on X11, that means room metadata still was not returned for the current session/map.
 
+## Ecovacs login verification
+
+- Ecovacs may now require a one-time email verification code for the integration device ID.
+- This fork persists the Ecovacs `deviceId` and prompts for the emailed verification code when Ecovacs returns error `1013`.
+
 ## Updating from upstream
 
 Use:
