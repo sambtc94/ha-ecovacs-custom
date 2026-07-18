@@ -89,8 +89,13 @@ class EcovacsController:
     async def initialize(self) -> None:
         """Init controller."""
         try:
-            devices = await self._api_client.get_devices()
+            # Authenticate before fetching devices so that a 1013 AuthenticationError
+            # is raised directly here rather than being wrapped inside an ApiError by
+            # the TaskGroup in api_client.get_devices().  Raising AuthenticationError
+            # allows the except block below to detect the device-verification error and
+            # re-raise it as ConfigEntryAuthFailed, which triggers the reauth flow.
             credentials = await self._authenticator.authenticate()
+            devices = await self._api_client.get_devices()
 
             if devices.mqtt:
                 mqtt = await self._get_mqtt_client()
