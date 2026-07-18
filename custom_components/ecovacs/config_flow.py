@@ -189,6 +189,7 @@ class EcovacsConfigFlow(ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Handle the initial step."""
+
         if not self.show_advanced_options:
             return await self.async_step_auth()
 
@@ -225,11 +226,15 @@ class EcovacsConfigFlow(ConfigFlow, domain=DOMAIN):
                 self._async_abort_entries_match(
                     {CONF_USERNAME: user_input[CONF_USERNAME]}
                 )
-            device_id = _get_device_id(self.hass, user_input)
-            validation = await _validate_input(self.hass, user_input, device_id)
+            flow_user_input = {
+                **user_input,
+                CONF_DEVICE_ID: _get_device_id(self.hass, user_input),
+            }
+            device_id = flow_user_input[CONF_DEVICE_ID]
+            validation = await _validate_input(self.hass, flow_user_input, device_id)
 
             if validation.requires_device_verification:
-                self._pending_user_input = {**user_input, CONF_DEVICE_ID: device_id}
+                self._pending_user_input = flow_user_input
                 self._pending_device_id = device_id
                 request_errors = await self._async_request_device_verification_code()
                 if not request_errors:
@@ -241,11 +246,11 @@ class EcovacsConfigFlow(ConfigFlow, domain=DOMAIN):
                     if self._reauth_entry is not None:
                         return self.async_update_reload_and_abort(
                             self._reauth_entry,
-                            data_updates=user_input,
+                            data_updates=flow_user_input,
                         )
                     return self.async_create_entry(
                         title=user_input[CONF_USERNAME],
-                        data={**user_input, CONF_DEVICE_ID: device_id},
+                        data=flow_user_input,
                     )
 
         return self._show_auth_form(user_input, errors)
