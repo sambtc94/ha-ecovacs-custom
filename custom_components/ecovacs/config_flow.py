@@ -74,9 +74,8 @@ def _is_self_hosted(user_input: Mapping[str, Any]) -> bool:
 
 def _get_device_id(hass: HomeAssistant, user_input: Mapping[str, Any]) -> str:
     """Return the stored or generated device id for the flow."""
-    return str(
-        user_input.get(CONF_DEVICE_ID)
-        or generate_client_device_id(hass, _is_self_hosted(user_input))
+    return user_input.get(CONF_DEVICE_ID) or generate_client_device_id(
+        hass, _is_self_hosted(user_input)
     )
 
 
@@ -241,7 +240,7 @@ class EcovacsConfigFlow(ConfigFlow, domain=DOMAIN):
                     if self._reauth_entry is not None:
                         return self.async_update_reload_and_abort(
                             self._reauth_entry,
-                            data_updates={**user_input, CONF_DEVICE_ID: device_id},
+                            data_updates=user_input,
                         )
                     return self.async_create_entry(
                         title=user_input[CONF_USERNAME],
