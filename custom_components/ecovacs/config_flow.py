@@ -180,6 +180,7 @@ class EcovacsConfigFlow(ConfigFlow, domain=DOMAIN):
 
     def __init__(self) -> None:
         """Initialize verification state used across config and reauth steps."""
+        super().__init__()
         self._pending_user_input: dict[str, Any] | None = None
         self._pending_device_id: str | None = None
         self._reauth_entry: ConfigEntry | None = None
