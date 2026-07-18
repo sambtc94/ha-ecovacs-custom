@@ -281,11 +281,15 @@ class EcovacsConfigFlow(ConfigFlow, domain=DOMAIN):
                 CONF_COUNTRY: self.hass.config.country,
             }
 
+        data_schema = vol.Schema(schema)
+        if user_input:
+            data_schema = self.add_suggested_values_to_schema(
+                data_schema=data_schema, suggested_values=user_input
+            )
+
         return self.async_show_form(
             step_id="auth",
-            data_schema=self.add_suggested_values_to_schema(
-                data_schema=vol.Schema(schema), suggested_values=user_input
-            ),
+            data_schema=data_schema,
             errors=errors,
             last_step=self._reauth_entry is None,
         )
