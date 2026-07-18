@@ -1,4 +1,49 @@
 {
+  "config": {
+    "abort": {
+      "already_configured": "Account is already configured"
+    },
+    "error": {
+      "cannot_connect": "Failed to connect",
+      "invalid_auth": "Invalid authentication",
+      "invalid_verification_code": "Invalid or expired verification code",
+      "invalid_url": "Invalid URL",
+      "invalid_url_schema_override_mqtt_url": "Invalid MQTT URL scheme.\nThe URL should start with `mqtt://` or `mqtts://`.",
+      "invalid_url_schema_override_rest_url": "Invalid REST URL scheme.\nThe URL should start with `http://` or `https://`.",
+      "verification_required": "Device verification is still required. Request a new code and try again.",
+      "unknown": "Unexpected error"
+    },
+    "step": {
+      "auth": {
+        "data": {
+          "country": "Country",
+          "override_mqtt_url": "MQTT URL",
+          "override_rest_url": "REST URL",
+          "password": "Password",
+          "username": "Username",
+          "verify_mqtt_certificate": "Verify MQTT SSL certificate"
+        },
+        "data_description": {
+          "override_mqtt_url": "Enter the MQTT URL of your self-hosted instance including the scheme (mqtt/mqtts).",
+          "override_rest_url": "Enter the REST URL of your self-hosted instance including the scheme (http/https)."
+        }
+      },
+      "user": {
+        "data": {
+          "mode": "Mode"
+        },
+        "data_description": {
+          "mode": "Select the mode you want to use to connect to Ecovacs. If you are unsure, select Cloud.\n\nSelect Self-hosted only if you have a working self-hosted instance."
+        }
+      },
+      "verify_device": {
+        "data": {
+          "verification_code": "Verification code"
+        },
+        "description": "Ecovacs emailed a one-time verification code to {email} for device `{device_id}`. Enter that code here to trust this Home Assistant device."
+      }
+    }
+  },
   "entity": {
     "sensor": {
       "current_room": {

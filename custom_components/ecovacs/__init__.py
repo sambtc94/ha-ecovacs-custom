@@ -8,9 +8,10 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 
-from .const import DOMAIN
+from .const import CONF_DEVICE_ID, CONF_OVERRIDE_REST_URL, DOMAIN
 from .controller import EcovacsController
 from .services import async_setup_services
+from .util import generate_client_device_id
 
 PLATFORMS = [
     Platform.BINARY_SENSOR,
@@ -37,7 +38,14 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: EcovacsConfigEntry) -> bool:
     """Set up this integration using UI."""
-    controller = EcovacsController(hass, entry.data)
+    entry_data = dict(entry.data)
+    if CONF_DEVICE_ID not in entry_data:
+        entry_data[CONF_DEVICE_ID] = generate_client_device_id(
+            hass, CONF_OVERRIDE_REST_URL in entry_data
+        )
+        hass.config_entries.async_update_entry(entry, data=entry_data)
+
+    controller = EcovacsController(hass, entry_data)
 
     entry.async_on_unload(controller.teardown)
 
